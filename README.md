@@ -1,4 +1,4 @@
-# SkToolbox-for-MiniMetro
+# SkToolbox for MiniMetro
 SkToolbox for Mini Metro
 Provides an add asset menu and displays city information.
 
