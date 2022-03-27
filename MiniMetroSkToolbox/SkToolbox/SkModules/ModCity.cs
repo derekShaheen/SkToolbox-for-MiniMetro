@@ -1,24 +1,22 @@
-﻿using SkToolbox.Commands;
+﻿using SkToolbox.Utility;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using SkToolbox.Utility;
 using UnityEngine;
 
 namespace SkToolbox.SkModules
 {
-    class ModCity : SkBaseModule, IModule
+    internal class ModCity : SkBaseModule, IModule
     {
-        Game game;
-        GameController gameController;
+        private Game game;
+        private GameController gameController;
 
         private Rect StatsWindow = new Rect(5, 100, 150, 50);
-        private Rect LinesWindow = new Rect(325, 5, 450, 50);
+        private Rect LinesWindow = new Rect(325, 5, 500, 50);
         private bool IsGUIVisibleStation = false;
         private bool IsGUIVisibleLine = false;
         private bool IsEditMode = false;
+        private FLabel WeekLabel;
+        private int Week = 0;
 
         public ModCity() : base()
         {
@@ -41,6 +39,7 @@ namespace SkToolbox.SkModules
             GenericMenu.AddItemToggle("Toggle Edit Mode", ref IsEditMode, new Action(BeginEdit));
             GenericMenu.AddItemToggle("Toggle Station Information", ref IsGUIVisibleStation, new Action(ToggleStationGUI));
             GenericMenu.AddItemToggle("Toggle Line Information", ref IsGUIVisibleLine, new Action(ToggleLineGUI));
+            GenericMenu.AddItem("Show Week Number", new Action(AddWeekTime));
             MenuOptions = GenericMenu;
         }
 
@@ -64,12 +63,13 @@ namespace SkToolbox.SkModules
             GetObjects();
             IsEditMode = !IsEditMode;
 
-            if(IsEditMode)
+            if (IsEditMode)
             {
                 game.City.CityGrid.GenerateStationCircles(game.City, true);
                 SkUtilities.InvokePrivateMethod(game.HudScreen, "AddSandboxToggleButton", new object[] { });
                 game?.HudScreen?.ShowEditModeButton();
-            } else
+            }
+            else
             {
                 game?.HudScreen?.HideEditModeButton();
                 SkUtilities.InvokePrivateMethod(game.HudScreen, "RemoveSandboxToggleButton", new object[] { });
@@ -95,6 +95,29 @@ namespace SkToolbox.SkModules
             }
         }
 
+        public void AddWeekTime()
+        {
+            GetObjects();
+
+            Font clockLabel = game?.HudScreen?.ClockWidget.DayFont;
+            if (WeekLabel == null)
+            {
+                WeekLabel = new FLabel(clockLabel.GetFFont(LocaleDatabase.Instance.CurrentLocale), "Week " + game?.City.Clock.Week.ToString()
+                    , LocaleDatabase.Instance.CurrentLocale.TextDirection, Main.Instance.Scene.MenuDetailPartitionId, 0, null);
+                WeekLabel.alignToPixel = true;
+                WeekLabel.x = game.HudScreen.ClockWidget.AdjustedX - 5;
+                WeekLabel.y = 15;
+                WeekLabel.scale = Main.AspectRatioDelta;
+                WeekLabel.anchorX = 1f;
+                WeekLabel.anchorY = 0.6f;
+                game?.HudScreen?.ClockWidget.container.AddChild(WeekLabel);
+            } else
+            {
+                WeekLabel.SetText(new LocalizedString(LocaleDatabase.Instance.CurrentLocale, "Week " + game?.City.Clock.Week.ToString()));
+            }
+            
+        }
+
         public void OnGUI()
         {
             if (IsGUIVisibleStation && game?.City?.StationCount > 0)
@@ -113,6 +136,7 @@ namespace SkToolbox.SkModules
             if (IsGUIVisibleStation)
             {
                 GetObjects();
+                StatsWindow = new Rect(5, 100, 150, 50);
             }
             BeginMenu();
         }
@@ -123,6 +147,7 @@ namespace SkToolbox.SkModules
             if (IsGUIVisibleLine)
             {
                 GetObjects();
+                LinesWindow = new Rect(325, 5, 500, 50);
             }
             BeginMenu();
         }
@@ -134,7 +159,7 @@ namespace SkToolbox.SkModules
                 IsGUIVisibleStation = false;
                 IsGUIVisibleLine = false;
                 StatsWindow = new Rect(5, 100, 150, 50);
-                LinesWindow = new Rect(325, 5, 450, 50);
+                LinesWindow = new Rect(325, 5, 500, 50);
 
                 if (IsEditMode)
                 {
@@ -143,93 +168,104 @@ namespace SkToolbox.SkModules
                     SkUtilities.InvokePrivateMethod(game.HudScreen, "RemoveSandboxToggleButton", new object[] { });
                 }
 
+                WeekLabel = null;
+                Week = 0;
+
                 BeginMenu();
+            }
+            if(game != null && Week != game.City.Clock.Week && WeekLabel != null)
+            {
+                Week = game.City.Clock.Week;
+                WeekLabel.SetText(new LocalizedString(LocaleDatabase.Instance.CurrentLocale, "Week " + Week + 1));
             }
         }
 
         private void ProcessStats(int WindowID)
         {
-                //StatsWindow.height = 47;
-                GUILayout.BeginVertical();
-                GUIStyle displayStyle = new GUIStyle(GUI.skin.box);
-                displayStyle.richText = true;
-                foreach (string stationtype in Enum.GetNames(typeof(StationType)))
+            GUILayout.BeginVertical();
+            GUIStyle displayStyle = new GUIStyle(GUI.skin.box);
+            displayStyle.richText = true;
+            foreach (string stationtype in Enum.GetNames(typeof(StationType)))
+            {
+                GUI.color = ThemeDatabase.Instance.MenuTheme.GetLineColor(((int)Enum.Parse(typeof(StationType), stationtype) % ThemeDatabase.Instance.MenuTheme.LineCount));
+                //GUI.backgroundColor = ThemeDatabase.Instance.MenuTheme.GetLineColor(((int)Enum.Parse(typeof(StationType), stationtype) % ThemeDatabase.Instance.MenuTheme.LineCount));
+                GUILayout.BeginHorizontal();
+                List<Station> stationList = game.City.GetStationsOfType((StationType)Enum.Parse(typeof(StationType), stationtype));
+                int? stationCount = stationList.Count;
+                int stationCapacity = 0;
+                int stationPeeps = 0;
+                int stationOver = 0;
+                foreach (Station station in stationList)
                 {
-                    GUI.color = ThemeDatabase.Instance.MenuTheme.GetLineColor(((int)Enum.Parse(typeof(StationType), stationtype) % ThemeDatabase.Instance.MenuTheme.LineCount));
-                    //GUI.backgroundColor = ThemeDatabase.Instance.MenuTheme.GetLineColor(((int)Enum.Parse(typeof(StationType), stationtype) % ThemeDatabase.Instance.MenuTheme.LineCount));
-                    GUILayout.BeginHorizontal();
-                    List<Station> stationList = game.City.GetStationsOfType((StationType)Enum.Parse(typeof(StationType), stationtype));
-                    int? stationCount = stationList.Count;
-                    int stationCapacity = 0;
-                    int stationPeeps = 0;
-                    int stationOver = 0;
-                    foreach (Station station in stationList) {
-                        stationCapacity += station.PeepCapacity;
-                        stationPeeps += station.PeepCount;
-                        if(station.PeepCount > station.PeepCapacity)
-                        {
-                            stationOver += 1;
-                        }
-                    }
-
-                    if (stationCount > 0)
+                    stationCapacity += station.PeepCapacity;
+                    stationPeeps += station.PeepCount;
+                    if (station.PeepCount > station.PeepCapacity)
                     {
-                        GUILayout.Button("<b>" + stationCount + " " + stationtype.Substring(0, 1) + stationtype.Substring(1).ToLower() + (stationCount > 1 ? "s" : "")  + "</b>", displayStyle);
-                        GUILayout.Button("<b>Peeps Waiting: " + stationPeeps + "</b>", displayStyle);
-                        if(stationOver > 0)
-                        {
-                            GUI.color = Color.red;
-                            GUILayout.Button("<b>CROWDED: " + stationOver + "</b>", displayStyle);
-                            GUI.color = ThemeDatabase.Instance.MenuTheme.GetLineColor(((int)Enum.Parse(typeof(StationType), stationtype) % ThemeDatabase.Instance.MenuTheme.LineCount));
-                        }
+                        stationOver += 1;
                     }
-                    GUILayout.EndHorizontal();
                 }
-                GUI.color = Color.white;
-                GUILayout.Button("<b>Total Stations: " + game?.City?.StationCount.ToString() + "</b>", displayStyle);
-                GUILayout.EndVertical();
-                GUI.DragWindow(new Rect(0, 0, 10000, 20));
+
+                if (stationCount > 0)
+                {
+                    GUILayout.Button("<b>" + stationCount + " " + stationtype.Substring(0, 1) + stationtype.Substring(1).ToLower() + (stationCount > 1 ? "s" : "") + "</b>", displayStyle);
+                    GUILayout.Button("<b>Peeps Waiting: " + stationPeeps + "</b>", displayStyle);
+                    if (stationOver > 0)
+                    {
+                        GUI.color = Color.red;
+                        GUILayout.Button("<b>CROWDED: " + stationOver + "</b>", displayStyle);
+                        GUI.color = ThemeDatabase.Instance.MenuTheme.GetLineColor(((int)Enum.Parse(typeof(StationType), stationtype) % ThemeDatabase.Instance.MenuTheme.LineCount));
+                    }
+                }
+                GUILayout.EndHorizontal();
+            }
+            GUI.color = Color.white;
+            GUILayout.Button("<b>Total Stations: " + game?.City?.StationCount.ToString() + "</b>", displayStyle);
+            GUILayout.EndVertical();
+            GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
 
         private void ProcessLines(int WindowID)
         {
             int totalLinks = 0;
-                //LinesWindow.height = 47;
-                GUIStyle displayStyle = new GUIStyle(GUI.skin.box);
-                GUILayout.BeginVertical();
-                foreach (Line line in SkUtilities.GetPrivateField<List<Line>>(game.City, "lines"))
-                {
-                    totalLinks += line.LiveLinkCount + 1;
-                    GUI.color = line.PeepColor;
-                    GUI.backgroundColor = line.Color;
-                    displayStyle.richText = true;
+            //LinesWindow.height = 47;
+            GUIStyle displayStyle = new GUIStyle(GUI.skin.box);
+            GUILayout.BeginVertical();
+            int averageLength = Mathf.RoundToInt(game.City.TrackLength) / game.City.LineCount;
+            foreach (Line line in SkUtilities.GetPrivateField<List<Line>>(game.City, "lines"))
+            {
+                totalLinks += line.LiveLinkCount + (line.IsLooping ? 0 : 1);
+                GUI.color = line.PeepColor;
+                GUI.backgroundColor = line.Color;
+                displayStyle.richText = true;
 
-                    GUILayout.BeginHorizontal();
-                    if (line.IsSelected || line.IsBeingEdited)
-                    {
-                        GUILayout.Label("<b>►</b>", displayStyle);
-                    }
-                    GUILayout.Button("<b>In Transit: " + line.PeepCount.ToString().PadLeft(2, '0') + "</b>", displayStyle);
-                    GUILayout.Button("<b>Stations: " + (line.LiveLinkCount + 1).ToString().PadLeft(2, '0') + "</b>", displayStyle);
-                    GUILayout.Button("<b>Length: " + Mathf.RoundToInt(line.Length).ToString().PadLeft(4, '0') + "</b>", displayStyle);
-                    if (line.LiveLinkCount > 0)
-                    {
-                        GUILayout.Button("<b>Avg: " + Mathf.RoundToInt(line.Length / (line.LiveLinkCount + 1)).ToString().PadLeft(3, '0') + "</b>", displayStyle);
-                    }
-                    GUILayout.Button("<b>Tr: " + line.TrainCount + "</b>", displayStyle);
-                    GUILayout.Button("<b>Ca: " + line.CarriageCount + "</b>", displayStyle);
-                    GUILayout.EndHorizontal();
-                }
-                GUI.color = Color.white;
                 GUILayout.BeginHorizontal();
-                //GUILayout.Label("Peeps: " + game.City.PassengersInTransit + " / " + game.City.TotalCapacity);
-                GUILayout.Button("<b>Total Links: " + totalLinks + "</b>", displayStyle);
-                GUILayout.Button("<b>Total Length: " + Mathf.RoundToInt(game.City.TrackLength) 
-                    + " (Avg: " + (Mathf.RoundToInt(game.City.TrackLength) / game.City.LineCount).ToString().PadLeft(3, '0') + ")</b>", displayStyle);
-                GUILayout.Button("<b>Trip Count: " + game.City.TripCount + "</b>", displayStyle);
+                if (line.IsSelected || line.IsBeingEdited)
+                {
+                    GUILayout.Label("<b>►</b>", displayStyle);
+                }
+                GUILayout.Button("<b>In Transit: " + line.PeepCount.ToString().PadLeft(2, '0') + "</b>", displayStyle);
+                GUILayout.Button("<b>Stations: " + (line.LiveLinkCount + 1).ToString().PadLeft(2, '0') + "</b>", displayStyle);
+                GUILayout.Button("<b>Length: " + Mathf.RoundToInt(line.Length).ToString().PadLeft(4, '0') 
+                    + " (" + (Mathf.RoundToInt(line.Length - averageLength)).ToString().PadLeft(3, '0') + ")" + "</b>", displayStyle);
+                if (line.LiveLinkCount > 0)
+                {
+                    GUILayout.Button("<b>Avg: " + Mathf.RoundToInt((line.Length / (line.LiveLinkCount + 1))) + "</b>", displayStyle);
+                    GUILayout.Button("<b>Eff: " + Math.Round(Audio.GetLineEfficiency(line.Index), 2) + "</b>", displayStyle);
+                }
+                GUILayout.Button("<b>Tr: " + line.TrainCount + "</b>", displayStyle);
+                GUILayout.Button("<b>Ca: " + line.CarriageCount + "</b>", displayStyle);
                 GUILayout.EndHorizontal();
-                GUILayout.EndVertical();
-                GUI.DragWindow(new Rect(0, 0, 10000, 20));
+            }
+            GUI.color = Color.white;
+            GUILayout.BeginHorizontal();
+            //GUILayout.Label("Peeps: " + game.City.PassengersInTransit + " / " + game.City.TotalCapacity);
+            GUILayout.Button("<b>Total Links: " + totalLinks + "</b>", displayStyle);
+            GUILayout.Button("<b>Total Length: " + Mathf.RoundToInt(game.City.TrackLength)
+                + " (Avg: " + (averageLength).ToString().PadLeft(3, '0') + ")</b>", displayStyle);
+            GUILayout.Button("<b>Trip Count: " + game.City.TripCount + "</b>", displayStyle);
+            GUILayout.EndHorizontal();
+            GUILayout.EndVertical();
+            GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
 
         public void GetObjects()
