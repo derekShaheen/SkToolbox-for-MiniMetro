@@ -1,28 +1,17 @@
 ﻿using BepInEx;
+using System.Collections;
 using UnityEngine;
-// Thank you to wh0am15533 for the BepInEx examples
-namespace SkToolbox.Loaders
+
+namespace SkToolboxMiniMetro
 {
     [BepInPlugin(GUID, MODNAME, VERSION)]
+    [BepInDependency("com.Skrip.SkToolbox")]
     class SkBepInExLoader : BaseUnityPlugin
     {
         public const string
-            MODNAME = "Trainer",
+            MODNAME = "SkToolboxMiniMetro",
             AUTHOR = "Skrip",
             GUID = "com." + AUTHOR + "." + MODNAME,
-            VERSION = "1.0.0.0";
-
-        private bool hideFromBepInEx = true;
-
-        private void Start()
-        {
-            base.transform.parent = null;
-            Object.DontDestroyOnLoad(this);
-            SkLoader.Init();
-            if(hideFromBepInEx)
-            {
-                Destroy(this);
-            }
-        }
+            VERSION = "1.0.1.0";
     }
 }

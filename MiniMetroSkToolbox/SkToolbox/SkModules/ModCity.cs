@@ -1,99 +1,134 @@
-﻿using SkToolbox.Utility;
+﻿
+using SkToolbox;
+using SkToolbox.SkModules;
+using SkToolbox.Utility;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace SkToolbox.SkModules
+namespace SkToolboxMiniMetro
 {
-    internal class ModCity : SkBaseModule, IModule
+    public class ModCity : IModule
     {
-        private Game game;
-        private GameController gameController;
+        public Game game;
+        public GameController gameController;
 
-        private Rect StatsWindow = new Rect(5, 100, 150, 50);
-        private Rect LinesWindow = new Rect(325, 5, 500, 50);
-        private bool IsGUIVisibleStation = false;
-        private bool IsGUIVisibleLine = false;
-        private bool IsEditMode = false;
-        private FLabel WeekLabel;
-        private int Week = 0;
+        public Rect StatsWindow = new Rect(5, 100, 150, 50);
+        public Rect LinesWindow = new Rect(325, 5, 500, 50);
+        public bool IsGUIVisibleStation = false;
+        public bool IsGUIVisibleLine = false;
 
-        public ModCity() : base()
+        public bool IsNextStationVisible = false;
+        public int NextStationIndex = 0;
+        public FInstancedGeoSprite NextStationSprite;
+        public Station NextStation;
+        public FLabel WeekLabel;
+        public int Week = 0;
+
+        private string moduleName = "City";
+
+        private ModCityMonoBehavior modCityGameobject;
+
+        #region Standard Methods
+        /// <summary>
+        /// These methods will be used in every menu module. Copy / Paste this entire Standard Methods region to new modules as they are created.
+        /// These are placed here instead of a base class due to Activator.CreateInstance() not being able to call subclass constructors. 
+        /// 
+        /// !! This region generally does not need to be modified.
+        /// </summary>
+        public SkMenu MenuOptions { get; set; } = new SkMenu();
+        public SkMenuItem CallerEntry { get; set; } = new SkMenuItem();
+        public SkUtilities.Status ModuleStatus { get; set; } = SkUtilities.Status.Initialized;
+        public bool IsEnabled
         {
-            base.ModuleName = "City";
-            base.Loading();
+            get { return isEnabled; }
+            set
+            {
+                if (IsEnabled && ModuleStatus != SkUtilities.Status.Ready) // If the module is ready, then it is loaded and running.
+                {   // To disable, set the status to "Unload" so it properly unloads.
+                    isEnabled = value;
+                }
+                if (!IsEnabled)
+                {
+                    IsEnabled = value;
+                }
+            }
+        }
+
+        public string ModuleName { get => moduleName; set => moduleName = value; }
+
+
+        private bool isEnabled = true;
+
+        internal bool conWriteToFile = false;
+
+        public List<SkMenuItem> FlushMenu()
+        {
+            return MenuOptions.FlushMenu();
+        }
+
+        public void RequestMenu()
+        {
+            SkToolbox.Loaders.SkLoader.MenuController.RequestSubMenu(MenuOptions.FlushMenu());
+        }
+
+        public void RequestMenu(SkMenu Menu)
+        {
+            SkToolbox.Loaders.SkLoader.MenuController.RequestSubMenu(Menu);
+        }
+
+        public void RemoveModule()
+        {
+
+            throw new NotImplementedException();
+            //Destroy(this);
+        }
+
+        public void Ready()
+        {
+            ModuleStatus = SkUtilities.Status.Ready;
+        }
+        public void Loading()
+        {
+            ModuleStatus = SkUtilities.Status.Loading;
+        }
+        public void Error()
+        {
+            ModuleStatus = SkUtilities.Status.Error;
+        }
+        public void Unload()
+        {
+            ModuleStatus = SkUtilities.Status.Unload;
+        }
+        #endregion Standard Methods
+
+
+        #region Required but Individual
+        public ModCity()
+        {
+            Loading();
+            Start();
         }
 
         public void Start()
         {
             BeginMenu();
-            base.CallerEntry = new SkMenuItem("City Menu   \t►", () => base.SkMC.RequestSubMenu(base.FlushMenu()));
-            base.Ready(); // Must be called when the module has completed initialization. // End of Start
+            CallerEntry = new SkMenuItem("City Menu   \t►", () => SkToolbox.Loaders.SkLoader.MenuController.RequestSubMenu(FlushMenu()));
+            Ready(); // Must be called when the module has completed initialization. // End of Start
 
         }
 
         public void BeginMenu()
         {
             SkMenu GenericMenu = new SkMenu();
-            GenericMenu.AddItem("Set Gamemode ►", new Action(BeginSelectGamemode));
-            GenericMenu.AddItemToggle("Toggle Edit Mode", ref IsEditMode, new Action(BeginEdit));
-            GenericMenu.AddItemToggle("Toggle Station Information", ref IsGUIVisibleStation, new Action(ToggleStationGUI));
-            GenericMenu.AddItemToggle("Toggle Line Information", ref IsGUIVisibleLine, new Action(ToggleLineGUI));
-            GenericMenu.AddItem("Show Week Number", new Action(AddWeekTime));
+
+            GenericMenu.AddItemToggle("Station Information", ref IsGUIVisibleStation, new Action(ToggleStationGUI), "View station information");
+            GenericMenu.AddItemToggle("Line Information", ref IsGUIVisibleLine, new Action(ToggleLineGUI), "View line information");
+            GenericMenu.AddItemToggle("Next Station", ref IsNextStationVisible, new Action(ToggleNextStationViewer), "Identifies where the next station will appear");
+            GenericMenu.AddItem("Show Week Number", new Action(AddWeekTime), "Adds the Week # to the UI");
             MenuOptions = GenericMenu;
         }
-
-        public void BeginSelectGamemode()
-        {
-            GetObjects();
-            SkMenu skMenu = new SkMenu();
-            foreach (string gameMode in Enum.GetNames(typeof(GameMode)))
-            {
-                if (!gameMode.Equals("None") && !gameMode.Equals("Count"))
-                {
-                    skMenu.AddItem(gameMode, new Action<string>(SetGamemode), "Current: " + game?.Mode.ToString());
-                }
-            }
-
-            base.RequestMenu(skMenu);
-        }
-
-        public void BeginEdit()
-        {
-            GetObjects();
-            IsEditMode = !IsEditMode;
-
-            if (IsEditMode)
-            {
-                game.City.CityGrid.GenerateStationCircles(game.City, true);
-                SkUtilities.InvokePrivateMethod(game.HudScreen, "AddSandboxToggleButton", new object[] { });
-                game?.HudScreen?.ShowEditModeButton();
-            }
-            else
-            {
-                game?.HudScreen?.HideEditModeButton();
-                SkUtilities.InvokePrivateMethod(game.HudScreen, "RemoveSandboxToggleButton", new object[] { });
-            }
-            SkUtilities.Logz("Edit mode set to: " + IsEditMode.ToString());
-
-            BeginMenu();
-        }
-
-        public void SetGamemode(string pGameMode)
-        {
-            GetObjects();
-
-            GameMode gameMode = GameMode.CLASSIC;
-
-            Enum.TryParse(pGameMode, out gameMode);
-
-            if (game != null)
-            {
-                game.Mode = gameMode;
-                game?.HudScreen?.HandleGameModeChanged();
-                SkUtilities.Logz("Game mode set to: " + gameMode);
-            }
-        }
+        #endregion Required but Individual
 
         public void AddWeekTime()
         {
@@ -110,28 +145,24 @@ namespace SkToolbox.SkModules
                 WeekLabel.scale = Main.AspectRatioDelta;
                 WeekLabel.anchorX = 1f;
                 WeekLabel.anchorY = 0.6f;
+
                 game?.HudScreen?.ClockWidget.container.AddChild(WeekLabel);
-            } else
+            }
+            else
             {
                 WeekLabel.SetText(new LocalizedString(LocaleDatabase.Instance.CurrentLocale, "Week " + game?.City.Clock.Week.ToString()));
             }
-            
-        }
 
-        public void OnGUI()
-        {
-            if (IsGUIVisibleStation && game?.City?.StationCount > 0)
-            {
-                StatsWindow = GUILayout.Window(39999, StatsWindow, ProcessStats, "Station Information");
-            }
-            if (IsGUIVisibleLine && game?.City?.LineCount > 0)
-            {
-                LinesWindow = GUILayout.Window(39908, LinesWindow, ProcessLines, "Line Information");
-            }
         }
 
         public void ToggleStationGUI()
         {
+            if (modCityGameobject == null)
+            {
+                modCityGameobject = SkToolbox.Loaders.SkLoader._SkGameObject.AddComponent<ModCityMonoBehavior>();
+                modCityGameobject.parentClass = this;
+
+            }
             IsGUIVisibleStation = !IsGUIVisibleStation;
             if (IsGUIVisibleStation)
             {
@@ -139,6 +170,45 @@ namespace SkToolbox.SkModules
                 StatsWindow = new Rect(5, 100, 150, 50);
             }
             BeginMenu();
+        }
+
+        public void ToggleNextStationViewer()
+        {
+            if (modCityGameobject == null)
+            {
+                modCityGameobject = SkToolbox.Loaders.SkLoader._SkGameObject.AddComponent<ModCityMonoBehavior>();
+            }
+            IsNextStationVisible = !IsNextStationVisible;
+            if (IsNextStationVisible)
+            {
+                SetNextStation();
+            }
+            else
+            {
+                if (NextStationSprite != null)
+                {
+                    game.City.CityLayer.StationLayer.container.RemoveChild(NextStationSprite);
+                }
+            }
+            BeginMenu();
+        }
+
+        public void SetNextStation()
+        {
+            if (modCityGameobject == null)
+            {
+                modCityGameobject = SkToolbox.Loaders.SkLoader._SkGameObject.AddComponent<ModCityMonoBehavior>();
+            }
+            GetObjects();
+
+            NextStationIndex = game.City.StationCount + 1;
+            NextStation = SkUtilities.GetPrivateField<Station[]>(game?.City, "stations")[NextStationIndex];
+            if (NextStation != null)
+            {
+                NextStationSprite = GeoFactory.Instance.GetCross(10, Color.yellow, Main.Instance.Scene.MenuDetailPartitionId, 0); //GeoFactory.Instance.GetPlus(10, Color.white, Main.Instance.Scene.MenuDetailPartitionId, 0);
+                NextStationSprite.SetPosition(NextStation.Position);
+                game.City.CityLayer.StationLayer.container.AddChild(NextStationSprite);
+            }
         }
 
         public void ToggleLineGUI()
@@ -152,136 +222,27 @@ namespace SkToolbox.SkModules
             BeginMenu();
         }
 
-        public void Update()
-        {
-            if ((IsGUIVisibleStation || IsGUIVisibleLine || IsEditMode) && game?.IsOver == true)
-            {
-                IsGUIVisibleStation = false;
-                IsGUIVisibleLine = false;
-                StatsWindow = new Rect(5, 100, 150, 50);
-                LinesWindow = new Rect(325, 5, 500, 50);
-
-                if (IsEditMode)
-                {
-                    IsEditMode = false;
-                    game?.HudScreen?.HideEditModeButton();
-                    SkUtilities.InvokePrivateMethod(game.HudScreen, "RemoveSandboxToggleButton", new object[] { });
-                }
-
-                WeekLabel = null;
-                Week = 0;
-
-                BeginMenu();
-            }
-            if(game != null && Week != game.City.Clock.Week && WeekLabel != null)
-            {
-                Week = game.City.Clock.Week;
-                WeekLabel.SetText(new LocalizedString(LocaleDatabase.Instance.CurrentLocale, "Week " + Week + 1));
-            }
-        }
-
-        private void ProcessStats(int WindowID)
-        {
-            GUILayout.BeginVertical();
-            GUIStyle displayStyle = new GUIStyle(GUI.skin.box);
-            displayStyle.richText = true;
-            foreach (string stationtype in Enum.GetNames(typeof(StationType)))
-            {
-                GUI.color = ThemeDatabase.Instance.MenuTheme.GetLineColor(((int)Enum.Parse(typeof(StationType), stationtype) % ThemeDatabase.Instance.MenuTheme.LineCount));
-                //GUI.backgroundColor = ThemeDatabase.Instance.MenuTheme.GetLineColor(((int)Enum.Parse(typeof(StationType), stationtype) % ThemeDatabase.Instance.MenuTheme.LineCount));
-                GUILayout.BeginHorizontal();
-                List<Station> stationList = game.City.GetStationsOfType((StationType)Enum.Parse(typeof(StationType), stationtype));
-                int? stationCount = stationList.Count;
-                int stationCapacity = 0;
-                int stationPeeps = 0;
-                int stationOver = 0;
-                foreach (Station station in stationList)
-                {
-                    stationCapacity += station.PeepCapacity;
-                    stationPeeps += station.PeepCount;
-                    if (station.PeepCount > station.PeepCapacity)
-                    {
-                        stationOver += 1;
-                    }
-                }
-
-                if (stationCount > 0)
-                {
-                    GUILayout.Button("<b>" + stationCount + " " + stationtype.Substring(0, 1) + stationtype.Substring(1).ToLower() + (stationCount > 1 ? "s" : "") + "</b>", displayStyle);
-                    GUILayout.Button("<b>Peeps Waiting: " + stationPeeps + "</b>", displayStyle);
-                    if (stationOver > 0)
-                    {
-                        GUI.color = Color.red;
-                        GUILayout.Button("<b>CROWDED: " + stationOver + "</b>", displayStyle);
-                        GUI.color = ThemeDatabase.Instance.MenuTheme.GetLineColor(((int)Enum.Parse(typeof(StationType), stationtype) % ThemeDatabase.Instance.MenuTheme.LineCount));
-                    }
-                }
-                GUILayout.EndHorizontal();
-            }
-            GUI.color = Color.white;
-            GUILayout.Button("<b>Total Stations: " + game?.City?.StationCount.ToString() + "</b>", displayStyle);
-            GUILayout.EndVertical();
-            GUI.DragWindow(new Rect(0, 0, 10000, 20));
-        }
-
-        private void ProcessLines(int WindowID)
-        {
-            int totalLinks = 0;
-            //LinesWindow.height = 47;
-            GUIStyle displayStyle = new GUIStyle(GUI.skin.box);
-            GUILayout.BeginVertical();
-            int averageLength = Mathf.RoundToInt(game.City.TrackLength) / game.City.LineCount;
-            foreach (Line line in SkUtilities.GetPrivateField<List<Line>>(game.City, "lines"))
-            {
-                totalLinks += line.LiveLinkCount + (line.IsLooping ? 0 : 1);
-                GUI.color = line.PeepColor;
-                GUI.backgroundColor = line.Color;
-                displayStyle.richText = true;
-
-                GUILayout.BeginHorizontal();
-                if (line.IsSelected || line.IsBeingEdited)
-                {
-                    GUILayout.Label("<b>►</b>", displayStyle);
-                }
-                GUILayout.Button("<b>In Transit: " + line.PeepCount.ToString().PadLeft(2, '0') + "</b>", displayStyle);
-                GUILayout.Button("<b>Stations: " + (line.LiveLinkCount + 1).ToString().PadLeft(2, '0') + "</b>", displayStyle);
-                GUILayout.Button("<b>Length: " + Mathf.RoundToInt(line.Length).ToString().PadLeft(4, '0') 
-                    + " (" + (Mathf.RoundToInt(line.Length - averageLength)).ToString().PadLeft(3, '0') + ")" + "</b>", displayStyle);
-                if (line.LiveLinkCount > 0)
-                {
-                    GUILayout.Button("<b>Avg: " + Mathf.RoundToInt((line.Length / (line.LiveLinkCount + 1))) + "</b>", displayStyle);
-                    GUILayout.Button("<b>Eff: " + Math.Round(Audio.GetLineEfficiency(line.Index), 2) + "</b>", displayStyle);
-                }
-                GUILayout.Button("<b>Tr: " + line.TrainCount + "</b>", displayStyle);
-                GUILayout.Button("<b>Ca: " + line.CarriageCount + "</b>", displayStyle);
-                GUILayout.EndHorizontal();
-            }
-            GUI.color = Color.white;
-            GUILayout.BeginHorizontal();
-            //GUILayout.Label("Peeps: " + game.City.PassengersInTransit + " / " + game.City.TotalCapacity);
-            GUILayout.Button("<b>Total Links: " + totalLinks + "</b>", displayStyle);
-            GUILayout.Button("<b>Total Length: " + Mathf.RoundToInt(game.City.TrackLength)
-                + " (Avg: " + (averageLength).ToString().PadLeft(3, '0') + ")</b>", displayStyle);
-            GUILayout.Button("<b>Trip Count: " + game.City.TripCount + "</b>", displayStyle);
-            GUILayout.EndHorizontal();
-            GUILayout.EndVertical();
-            GUI.DragWindow(new Rect(0, 0, 10000, 20));
-        }
-
         public void GetObjects()
         {
             if (Main.Instance != null)
             {
-                gameController = SkUtilities.GetPrivateField<GameController>(Main.Instance, "controller");
-                if (gameController == null)
+                try
                 {
-                    SkUtilities.Logz("Could not find game controller.");
-                }
+                    gameController = SkUtilities.GetPrivateField<GameController>(Main.Instance, "controller");
+                    if (gameController == null)
+                    {
+                        SkUtilities.Logz("Could not find game controller.");
+                    }
 
-                game = SkUtilities.GetPrivateField<Game>(gameController, "game");
-                if (gameController == null)
+                    game = SkUtilities.GetPrivateField<Game>(gameController, "game");
+                    if (gameController == null)
+                    {
+                        SkUtilities.Logz("Could not find game.");
+                    }
+                }
+                catch (InvalidCastException)
                 {
-                    SkUtilities.Logz("Could not find game.");
+                    //
                 }
             }
         }
